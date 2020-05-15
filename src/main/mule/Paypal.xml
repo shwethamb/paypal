@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+    <http:listener-config name="Paypal-httpListenerConfig">
+        <http:listener-connection host="${http.host}" port="${http.port}" />
+    </http:listener-config>
+    <apikit:config name="Paypal-config" api="Paypal.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" />
+    <http:request-config name="PaypalToken_Request_configuration" doc:name="HTTP Request configuration" doc:id="7c322052-fbcd-47c6-a089-4f33ec34fa2b" >
+		<http:request-connection host="${paypal.host}" port="${paypal.port}" protocol="HTTPS">
+			<http:authentication >
+				<http:basic-authentication username="${paypal.clientid}" password="${paypal.secret}" />
+			</http:authentication>
+		</http:request-connection>
+	</http:request-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="d91bd135-0c48-48bd-a5fb-9fb12d482f80" file="application.properties" />
+	<flow name="GetAuthToken" doc:id="9bf1c685-a316-4d99-99c9-b45aae362fe4" >
+		<http:request method="POST" doc:name="RequestToken" doc:id="6de50c70-cd56-420a-8731-f59ba6500e0b" config-ref="PaypalToken_Request_configuration" path="/v1/oauth2/token">
+			<http:body ><![CDATA[#[%dw 2.0
+output application/java
+---
+write({
+grant_type: "client_credentials"
+}, 'application/x-www-form-urlencoded')]]]></http:body>
+		</http:request>
+		<set-variable value='#["bearer " ++ payload.access_token]' doc:name="Set Token" doc:id="e058c8d2-a93c-409d-bba6-932c15acba77" variableName="Token" />
+	</flow>
+	<flow name="Paypal-main">
+        <http:listener config-ref="Paypal-httpListenerConfig" path="/api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body><![CDATA[#[payload]]]></http:body>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="Paypal-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:BAD_REQUEST">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Bad request"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">400</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Method not allowed"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">405</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_ACCEPTABLE">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not acceptable"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">406</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:UNSUPPORTED_MEDIA_TYPE">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Unsupported media type"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">415</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:NOT_IMPLEMENTED">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Not Implemented"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">501</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="Paypal-console">
+        <http:listener config-ref="Paypal-httpListenerConfig" path="/console/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body><![CDATA[#[payload]]]></http:body>
+            </http:error-response>
+        </http:listener>
+        <apikit:console config-ref="Paypal-config" />
+        <error-handler>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{message: "Resource not found"}]]></ee:set-payload>
+                    </ee:message>
+                    <ee:variables>
+                        <ee:set-variable variableName="httpStatus">404</ee:set-variable>
+                    </ee:variables>
+                </ee:transform>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+    <flow name="put:\payments\(paymentID)\approval:Paypal-config">
+		<set-variable value="#[attributes.uriParams.paymentID]" doc:name="SetPaymentID" doc:id="c6c6fcda-e357-4cb4-b920-d099da9d234a" variableName="PaymentID"/>
+		<set-variable value="#[payload.payerID]" doc:name="SetPayerID" doc:id="e28a11ad-44eb-44a1-952d-d56cdae3536a" variableName="payerID" />
+		<flow-ref doc:name="Flow Reference" doc:id="64267a98-e463-4777-aa76-ba10669543ea" name="GetAuthToken"/>
+		<ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd" doc:id="6cdb0c76-7589-48b9-9e32-9a4114fcc71f">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  message: "Payment Successful"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="ac0f4bac-095a-4344-8d4b-dbe4674df43a" >
+				<ee:transform doc:name="Transform Message" doc:id="f21b1ec3-9885-48af-8822-f5e38ea9b483">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+		ErrorCode:'102',
+		ErrorMessage:error.errorMessage.payload.message
+		
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+    </flow>
+    <flow name="post:\payments:Paypal-config">
+		<flow-ref doc:name="GetToken" doc:id="c6739eb7-2c5d-4a56-b8f4-8ec774f3968a" name="GetAuthToken" />
+		<http:request method="POST" doc:name="CreatePayment" doc:id="95b648ae-9d6d-448a-93ba-8dd794036f69" config-ref="PaypalToken_Request_configuration" path="/v1/payments/payment" outputMimeType="application/json">
+			<http:body ><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  "intent": "sale",
+  "payer": {
+    "payment_method": "paypal"
+  },
+  "transactions": [{
+    "amount": {
+      "total": "30.11",
+      "currency": "INR",
+      "details": {
+        "subtotal": "30.00",
+        "tax": "0.07",
+        "shipping": "0.03",
+        "handling_fee": "1.00",
+        "shipping_discount": "-1.00",
+        "insurance": "0.01"
+      }
+    },
+    "description": "This is the payment transaction description.",
+    "custom": "EBAY_EMS_90048630024435",
+    "invoice_number": "48787589673",
+    "payment_options": {
+      "allowed_payment_method": "INSTANT_FUNDING_SOURCE"
+    },
+    "soft_descriptor": "ECHI5786786",
+    "item_list": {
+      "items": [{
+        "name": "hat",
+        "description": "Brown color hat",
+        "quantity": "5",
+        "price": "3",
+        "tax": "0.01",
+        "sku": "1",
+        "currency": "INR"
+      }, {
+        "name": "handbag",
+        "description": "Black color hand bag",
+        "quantity": "1",
+        "price": "15",
+        "tax": "0.02",
+        "sku": "product34",
+        "currency": "INR"
+      }],
+      "shipping_address": {
+        "recipient_name": "Hello World",
+        "line1": "4thFloor",
+        "line2": "unit#34",
+        "city": "SAn Jose",
+        "country_code": "IN",
+        "postal_code": "95131",
+        "phone": "011862212345678",
+        "state": "CA"
+      }
+    }
+  }],
+  "note_to_payer": "Contact us for any questions on your order.",
+  "redirect_urls": {
+    "return_url": "https://example.com",
+    "cancel_url": "https://example.com"
+  }
+}]]]></http:body>
+			<http:uri-params ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.Token
+}]]]></http:uri-params>
+		</http:request>
+		<ee:transform xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd" doc:id="11b89fed-6d33-4c44-8939-30be62009255">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "paymentID": payload.id
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="c66a0430-698e-421f-9de4-10eaa8675188" >
+				<ee:transform doc:name="Transform Message" doc:id="18267165-f954-43e5-bd73-ac30ac0a4fd3" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+			ErrorCode:'102',
+		ErrorMessage:error.errorMessage.payload.message
+	
+		
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+    </flow>
+</mule>

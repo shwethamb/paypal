@@ -1,0 +1,59 @@
+#%RAML 1.0
+baseUri: https://anypoint.mulesoft.com/mocking/api/v1/links/feb8548d-8bf0-4a9d-978c-b841535c709b/ # 
+title: Paypal
+
+
+/payments:
+  post:
+    body:
+      application/json:
+       example:  |
+        {
+          "description": "Baggage amount",
+         	"amount": "1234"
+        }
+
+    responses:
+      200:
+        body:
+         application/json:
+            example: |
+              {
+                "paymentID" : "PAY-123456789"
+              
+              }
+
+  /{paymentID}:
+    /approval:
+       put:
+        body:
+          application/json:
+            example:  |
+             {
+                 
+                  "payerID" : "Rw233dddf"
+              }
+
+        responses:
+                  
+          200:
+           body:
+              application/json:
+               example:   |
+                {                         
+                 "message" :  "payment Successful"
+                }
+
+
+
+        
+
+                       
+              
+        
+
+
+
+                  
+                
+     
